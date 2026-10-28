@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 
+# needs cleaning up, comments in particular might be whack
+
 def analyze_laser_li_curve():
     print("--- AUTOMATED INP LASER PARAMETRIC CHARACTERIZATION ---")
     
@@ -14,15 +16,17 @@ def analyze_laser_li_curve():
     slope_nominal = 0.4
     
     power_mw = []
-    for i in current_ma:
-        if i < threshold_nominal:
-            power_mw.append(np.random.normal(0.01, 0.005)) # Noise floor
-        else:
-            pure_power = (i - threshold_nominal) * slope_nominal
-            power_mw.append(pure_power + np.random.normal(0, 0.1)) # Add probe contact noise
-            
+    constant_noise_floor = np.random.normal(0.01, 0.005, size=current_ma.shape) # Background noise floor is present across all current levels
+    stimulated_power = (current_ma - threshold_nominal) * slope_nominal # Pure stimulated lasing power only calculates values above the threshold point
+    lasing_signal = np.where(current_ma < threshold_nominal, 0.0, stimulated_power) # Add them together and clip physical power at absolute zero
+    power_mw = np.maximum(0, lasing_signal + constant_noise_floor)
+
     df = pd.DataFrame({'Current_mA': current_ma, 'Power_mW': power_mw})
-    
+
+    # Pure Vectorized L-I Data Generation
+current_ma = np.linspace(0, 50, 50)
+
+
     print("\n--- STEP 1: AUTOMATED THRESHOLD CURRENT DETECTION ---")
     # In HVM, we locate the threshold by calculating the second derivative (d^2P/dI^2)
     # The peak of the second derivative indicates the sharpest change in curve velocity (lasing onset)
