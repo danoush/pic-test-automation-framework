@@ -35,7 +35,7 @@ def run_automated_wafer_probe_line(vna_hardware_driver):
         print(f"\nStarting automated step-and-repeat wafer sweep for Lot: {target_wafer}")
         
         # 3. Simulate high-volume die indexing over physical coordinates
-        for die_number in:
+        for die_number in range(101, 106):
             time.sleep(0.1) # Simulate mechanical micro-positioning stage travel time
             
             # Execute the measurement sweep array via the HAL driver
