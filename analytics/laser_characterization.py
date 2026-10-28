@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-# needs cleaning up, comments in particular might be whack
+# needs cleaning up, comments in particular might be whack. np.polyfit can be replaced with Polynomial.fit
 
 def analyze_laser_li_curve():
     print("--- AUTOMATED INP LASER PARAMETRIC CHARACTERIZATION ---")
