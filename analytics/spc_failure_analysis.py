@@ -3,6 +3,8 @@ import json
 import os
 import pandas as pd
 
+# can use pathlib instead (more modern approach)
+
 def load_factory_specifications():
     """Dynamically reads the decoupled hardware thresholds from the JSON configuration."""
     # Resolve file path relative to this script's position to avoid terminal execution bugs
