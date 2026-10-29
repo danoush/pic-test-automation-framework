@@ -1,6 +1,7 @@
 import sys
 import os
 import time
+import json
 
 # Ensure Python can find the root directory modules if run directly from within the pipelines folder
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -20,7 +21,8 @@ def run_automated_wafer_probe_line(vna_hardware_driver):
     # 1. Connect to our localized relational database
     db_conn = initialize_production_database()
     db_cursor = db_conn.cursor()
-    
+
+
     try:
         # 2. Boot up instrument hardware interface layer
         is_ready = vna_hardware_driver.connect()
@@ -43,7 +45,10 @@ def run_automated_wafer_probe_line(vna_hardware_driver):
             peak_power = max(s21_trace_data)
             
             # Parametric pass/fail grading limits step
-            grading_verdict = "PASS" if peak_power >= -1.0 else "FAIL"
+            with open("config/factory_settings.json", "r") as f:
+                specs = json.load(f)
+            s21_limit = specs["pass_fail_thresholds"]["min_s21_peak_db"]
+            grading_verdict = "PASS" if peak_power >= s21_limit else "FAIL"
             
             # Write metrics into relational storage via safe parameterized queries
             db_cursor.execute("""

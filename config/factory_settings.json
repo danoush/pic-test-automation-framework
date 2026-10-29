@@ -1,1 +1,15 @@
-
+{
+  "instrumentation": {
+    "default_if_bandwidth_hz": 20000,
+    "timeout_ms": 2000
+  },
+  "pass_fail_thresholds": {
+    "min_s21_peak_db": -1.5,
+    "min_responsivity_aw": 0.55,
+    "max_dark_current_na": 7.0
+  },
+  "spc_rules": {
+    "moving_average_window": 5,
+    "critical_yield_alert_percent": 80.0
+  }
+}
