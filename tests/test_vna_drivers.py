@@ -1,11 +1,5 @@
 import pytest
-import sys
-import os
 
-# Can upgrade to more modern pathlib, or even better, pyproject.toml with run pip install -e 
-
-# Ensure the execution runtime can locate the core repository files
-sys.path.append(str(Path(__file__).parent.parent))
 from core.vna_drivers import KeysightVNA, AnritsuVNA
 
 def test_keysight_driver_initial_state():

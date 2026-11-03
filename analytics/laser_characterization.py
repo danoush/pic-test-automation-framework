@@ -23,8 +23,7 @@ def analyze_laser_li_curve():
 
     df = pd.DataFrame({'Current_mA': current_ma, 'Power_mW': power_mw})
 
-    # Pure Vectorized L-I Data Generation
-current_ma = np.linspace(0, 50, 50)
+
 
 
     print("\n--- STEP 1: AUTOMATED THRESHOLD CURRENT DETECTION ---")
