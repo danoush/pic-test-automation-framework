@@ -13,8 +13,13 @@ Protocol facts, verified on our unit (NanoVNA-H, firmware 1.2.50, Nov 2026):
 """
 
 from cv2 import line
+from matplotlib import text
+from matplotlib import text
 import serial
 from yaml import scan
+import numpy as np
+import time
+import io
 
 from core.vna import VNA, SweepResult
 
@@ -40,38 +45,29 @@ def parse_scan(text: str, expected_points: int) -> SweepResult:
             number of lines doesn't equal expected_points. Never skip a bad
             line: silently dropping a point corrupts the trace.
     """
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not text.strip():
+        raise ValueError("Scan output is empty.")
     
-    if any(len(line.split()) != 5 for line in lines):
-        raise ValueError(
-            f"expected 5 numbers per line, got a line with {len(line.split())} values: {line}"
-        )
-    if len(lines) != expected_points:
-        raise ValueError(
-            f"expected {expected_points} points, got {len(lines)} lines of data"
-        )
-    freq = np.array([], dtype=float)
-    s11_real = np.array([], dtype=float)
-    s11_imag = np.array([], dtype=float)
-    s21_real = np.array([], dtype=float)
-    s21_imag = np.array([], dtype=float)
-    for line in lines:
-        freq = np.append(freq, float(line[0]))
-        s11_real = np.append(s11_real, float(line[1]))
-        s11_imag = np.append(s11_imag, float(line[2]))
-        s21_real = np.append(s21_real, float(line[3]))
-        s21_imag = np.append(s21_imag, float(line[4]))
-    s11_imag *= j
-    s21_imag *= j
-    s11_comp = s11_real + s11_imag 
-    s21_comp = s21_real + s21_imag
-    return SweepResult(
-        frequency_hz = freq,
-        s11 = s11_comp,
-        s21 = s21_comp
-    )
-    raise NotImplementedError
+    try:
+        data = np.loadtxt(io.StringIO(text), ndmin=2)
+    except Exception as err:
+        raise ValueError(f"Failed to parse scan text: {err}") from err
 
+    if data.ndim != 2 or data.shape[1] != 5:
+        raise ValueError("Each line must contain exactly 5 numbers.")
+    
+    if len(data) != expected_points:
+        raise ValueError(f"expected {expected_points} points, got {len(data)} lines of data")
+
+    freq = data[:, 0]
+    s11_comp = data[:, 1] + 1j * data[:, 2]
+    s21_comp = data[:, 3] + 1j * data[:, 4]
+
+    return SweepResult(
+        frequency_hz=freq, 
+        s11=s11_comp, 
+        s21=s21_comp
+    )
 
 class NanoVNA(VNA):
     """A NanoVNA-H connected over USB serial."""
@@ -101,13 +97,31 @@ class NanoVNA(VNA):
                 back. If the port opened but the prompt never came, close it
                 before raising so it isn't left locked.
         """
-        self._serial = self._serial_factory(self.port, baudrate=115200, timeout=self.timeout_s)
-        self._serial.write(self._query(""))
-        if self._serial.read_until(PROMPT) != PROMPT:
+        try:
+            self._serial = self._serial_factory(self.port, baudrate=115200, timeout=self.timeout_s)
+            self._query("")
+
+        except serial.SerialException as err:
+            if self._serial and self._serial.is_open:
+                self._serial.close()
+            self._serial = None
             raise ConnectionError(
-                f"No active serial session open with NanoVNA on {self.port}."
-            )
-        raise NotImplementedError
+                f"Failed to open serial port {self.port}: {err}"
+            ) from err
+        except TimeoutError as err:
+            if self._serial and self._serial.is_open:
+                self._serial.close()
+            self._serial = None
+            raise ConnectionError(
+                f"No prompt received from NanoVNA on {self.port} within {self.timeout_s} seconds."
+            ) from err
+        except Exception as err:
+            if self._serial and self._serial.is_open:
+                self._serial.close()
+            self._serial = None
+            raise ConnectionError(
+                f"Unexpected error while connecting to NanoVNA on {self.port}: {err}"
+            ) from err
 
     def close(self) -> None:
         """Close the port if it's open, and forget it.
@@ -117,18 +131,17 @@ class NanoVNA(VNA):
         if self._serial and self._serial.is_open:
             print(f"Port {self.port} is open, closing it now")
             self._serial.close()
-        if not self._serial and self._serial.is_closed:
+        else:
             print(f"Port {self.port} is already closed, nothing to do")
+        
         self._serial = None
         return None
-        raise NotImplementedError
 
     def identify(self) -> str:
         """Return the firmware version reported by the "version" command."""
         if not self._serial:
             raise ConnectionError("No active serial session open with NanoVNA.")
         return self._query("version")
-        raise NotImplementedError
 
     def measure(self, start_hz: float, stop_hz: float, points: int) -> SweepResult:
         """Sweep now with the "scan" command and return the parsed result.
@@ -148,10 +161,10 @@ class NanoVNA(VNA):
                 f"Error in starting/stopping frequency ({start_hz} Hz should be greater than 0 Hz and less than {stop_hz} Hz)"
                 f"or number of points (should be greater than 1 and less than {MAX_POINTS})"
             )
-        self._query(f"scan {start_hz} {stop_hz} {points} {SCAN_OUTMASK}")
+        response_text = self._query(f"scan {start_hz} {stop_hz} {points} {SCAN_OUTMASK}")
+        return parse_scan(response_text, expected_points=points)
         # The reply is the echoed command, then one line per point, then the prompt.
         # Remove the echo and prompt, then parse the remaining lines.
-        raise NotImplementedError
 
     def _query(self, command: str) -> str:
         """Send one shell command and return its output.
@@ -168,22 +181,36 @@ class NanoVNA(VNA):
             ConnectionError: if not connected.
             TimeoutError: if the prompt doesn't arrive before the timeout.
         """
-        if not self._serial or self._serial.is_closed:
-            raise ConnectionError(
-                f"No active serial session open with NanoVNA."
-            )
-        if current_time == timeout_time and PROMPT not in command:
-            raise TimeOutError(
-                f"Prompt did not arrive before the timeout."
-        )
-        version = "1.2.50"
-        info = "p.101"
-        if command == "":
-            return(f"{PROMPT.decode()}")
-        if "scan" in command:
-            return(f"{command}\\r\\n{PROMPT.decode()}")
-        if command == "version":
-            return(f"{version}\\r\\n{PROMPT.decode()}")
-        if command == "info":
-            return(f"{info}\\r\\n{PROMPT.decode()}")
-        raise NotImplementedError
+        if not self._serial or not self._serial.is_open:
+            raise ConnectionError("No active serial session open with NanoVNA.")
+
+        try:
+            self._serial.reset_input_buffer()
+            full_command = f"{command}\r".encode("ascii")
+            self._serial.write(full_command)
+
+            raw_response = self._serial.read_until(PROMPT)
+            
+            if not raw_response.endswith(PROMPT):
+                raise TimeoutError(f"Prompt did not arrive before the timeout for command: {command!r}")
+
+            response_str = raw_response.decode("ascii", errors="ignore")
+
+            lines = response_str.splitlines()
+            
+            output_lines = []
+            for line in lines:
+                if line.strip() == PROMPT.decode().strip():
+                    continue
+                if command and line == command:
+                    continue
+                output_lines.append(line)
+
+            return "\n".join(output_lines).strip()
+
+        except serial.SerialException as err:
+            raise ConnectionError(f"Serial communication error: {err}") from err
+        except TimeoutError as err:
+            raise err
+        except Exception as err:
+            raise ConnectionError(f"Unexpected error while querying NanoVNA: {err}") from err
