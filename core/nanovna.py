@@ -12,13 +12,8 @@ Protocol facts, verified on our unit (NanoVNA-H, firmware 1.2.50, Nov 2026):
   rate setting is ignored. 115200 is just a conventional value.
 """
 
-from cv2 import line
-from matplotlib import text
-from matplotlib import text
 import serial
-from yaml import scan
 import numpy as np
-import time
 import io
 
 from core.vna import VNA, SweepResult
@@ -27,6 +22,9 @@ PROMPT = b"ch> "
 MAX_POINTS = 101
 SCAN_OUTMASK = "0b111"  # bit 0: frequency, bit 1: S11, bit 2: S21
 
+class SyncError(ValueError):
+    """Raised when the driver and device lose synchronization."""
+    pass
 
 def parse_scan(text: str, expected_points: int) -> SweepResult:
     """Parse the output of "scan ... 0b111" into a SweepResult.
@@ -53,20 +51,20 @@ def parse_scan(text: str, expected_points: int) -> SweepResult:
     except Exception as err:
         raise ValueError(f"Failed to parse scan text: {err}") from err
 
-    if data.ndim != 2 or data.shape[1] != 5:
+    if data.shape[1] != 5:
         raise ValueError("Each line must contain exactly 5 numbers.")
     
     if len(data) != expected_points:
         raise ValueError(f"expected {expected_points} points, got {len(data)} lines of data")
 
-    freq = data[:, 0]
-    s11_comp = data[:, 1] + 1j * data[:, 2]
-    s21_comp = data[:, 3] + 1j * data[:, 4]
+    frequency_hz = data[:, 0]
+    s11 = data[:, 1] + 1j * data[:, 2]
+    s21 = data[:, 3] + 1j * data[:, 4]
 
     return SweepResult(
-        frequency_hz=freq, 
-        s11=s11_comp, 
-        s21=s21_comp
+        frequency_hz=frequency_hz, 
+        s11=s11, 
+        s21=s21
     )
 
 class NanoVNA(VNA):
@@ -115,13 +113,6 @@ class NanoVNA(VNA):
             raise ConnectionError(
                 f"No prompt received from NanoVNA on {self.port} within {self.timeout_s} seconds."
             ) from err
-        except Exception as err:
-            if self._serial and self._serial.is_open:
-                self._serial.close()
-            self._serial = None
-            raise ConnectionError(
-                f"Unexpected error while connecting to NanoVNA on {self.port}: {err}"
-            ) from err
 
     def close(self) -> None:
         """Close the port if it's open, and forget it.
@@ -135,12 +126,9 @@ class NanoVNA(VNA):
             print(f"Port {self.port} is already closed, nothing to do")
         
         self._serial = None
-        return None
 
     def identify(self) -> str:
         """Return the firmware version reported by the "version" command."""
-        if not self._serial:
-            raise ConnectionError("No active serial session open with NanoVNA.")
         return self._query("version")
 
     def measure(self, start_hz: float, stop_hz: float, points: int) -> SweepResult:
@@ -156,15 +144,20 @@ class NanoVNA(VNA):
         """
         start_hz = int(start_hz)
         stop_hz = int(stop_hz)
-        if start_hz <= 0 or stop_hz <= start_hz or points < 2 or points > MAX_POINTS:
-            raise ValueError(
-                f"Error in starting/stopping frequency ({start_hz} Hz should be greater than 0 Hz and less than {stop_hz} Hz)"
-                f"or number of points (should be greater than 1 and less than {MAX_POINTS})"
-            )
+        if start_hz <= 0:
+            raise ValueError("Starting frequency must be greater than 0 Hz.")
+        if stop_hz <= start_hz:
+            raise ValueError("Stop frequency must be greater than start frequency.")
+        if points < 2:
+            raise ValueError("Number of points must be greater than 1.")
+        if points > MAX_POINTS:
+            raise ValueError(f"Number of points should be less than {MAX_POINTS + 1}.")
+
         response_text = self._query(f"scan {start_hz} {stop_hz} {points} {SCAN_OUTMASK}")
-        return parse_scan(response_text, expected_points=points)
         # The reply is the echoed command, then one line per point, then the prompt.
         # Remove the echo and prompt, then parse the remaining lines.
+        return parse_scan(response_text, expected_points=points)
+
 
     def _query(self, command: str) -> str:
         """Send one shell command and return its output.
@@ -181,7 +174,7 @@ class NanoVNA(VNA):
             ConnectionError: if not connected.
             TimeoutError: if the prompt doesn't arrive before the timeout.
         """
-        if not self._serial or not self._serial.is_open:
+        if self._serial is None or not self._serial.is_open:
             raise ConnectionError("No active serial session open with NanoVNA.")
 
         try:
@@ -194,9 +187,12 @@ class NanoVNA(VNA):
             if not raw_response.endswith(PROMPT):
                 raise TimeoutError(f"Prompt did not arrive before the timeout for command: {command!r}")
 
-            response_str = raw_response.decode("ascii", errors="ignore")
+            response_str = raw_response.decode("ascii")
 
             lines = response_str.splitlines()
+
+            if lines[0] != command:
+                raise SyncError("Driver and device are out of step.")
             
             output_lines = []
             for line in lines:
@@ -212,5 +208,5 @@ class NanoVNA(VNA):
             raise ConnectionError(f"Serial communication error: {err}") from err
         except TimeoutError as err:
             raise err
-        except Exception as err:
-            raise ConnectionError(f"Unexpected error while querying NanoVNA: {err}") from err
+        except ValueError as err:
+            raise err

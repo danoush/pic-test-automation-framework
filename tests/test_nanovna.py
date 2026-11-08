@@ -242,3 +242,26 @@ def test_with_block_closes_port_even_after_an_error():
             vna.measure(900e6, 50e3, 11)  # bad arguments raise inside the block
 
     assert fake.is_open is False
+
+# ---------- added after the M2 review ----------
+
+def test_measure_rejects_corrupted_bytes():
+    # One byte damaged on the wire: a "0" inside the first S11 value became 0xFF.
+    # Silently dropping the bad byte would turn 1.001013517 into 1.01013517.
+    corrupted = SCAN_REPLY.replace(b"1.001013517", b"1.0\xff1013517", 1)
+    vna, fake = connected_vna({SCAN_COMMAND: corrupted})
+    with pytest.raises(ValueError):  # UnicodeDecodeError is a kind of ValueError
+        vna.measure(50e3, 900e6, 11)
+
+
+def test_bugs_are_not_disguised_as_connection_errors():
+    # A programming bug must surface as itself. Reported as a ConnectionError,
+    # it would send you off checking cables instead of reading the traceback.
+    vna, fake = connected_vna({b"version\r": b"version\r\n1.2.50\r\nch> "})
+
+    def broken_read_until(*args, **kwargs):
+        raise RuntimeError("stand-in for a bug in the read code")
+
+    fake.read_until = broken_read_until
+    with pytest.raises(RuntimeError):
+        vna.identify()
