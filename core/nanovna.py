@@ -22,7 +22,7 @@ PROMPT = b"ch> "
 MAX_POINTS = 101
 SCAN_OUTMASK = "0b111"  # bit 0: frequency, bit 1: S11, bit 2: S21
 
-class SyncError(ValueError):
+class SyncError(ConnectionError):
     """Raised when the driver and device lose synchronization."""
     pass
 
@@ -46,10 +46,11 @@ def parse_scan(text: str, expected_points: int) -> SweepResult:
     if not text.strip():
         raise ValueError("Scan output is empty.")
     
-    try:
-        data = np.loadtxt(io.StringIO(text), ndmin=2)
-    except Exception as err:
-        raise ValueError(f"Failed to parse scan text: {err}") from err
+    # try:
+    data = np.loadtxt(io.StringIO(text), ndmin=2)
+    # except ValueError as err:
+        # raise ValueError(f"Failed to parse scan text: {err}") from err
+    # likely unnecessary try/except
 
     if data.shape[1] != 5:
         raise ValueError("Each line must contain exactly 5 numbers.")
@@ -97,21 +98,18 @@ class NanoVNA(VNA):
         """
         try:
             self._serial = self._serial_factory(self.port, baudrate=115200, timeout=self.timeout_s)
-            self._query("")
-
         except serial.SerialException as err:
-            if self._serial and self._serial.is_open:
-                self._serial.close()
-            self._serial = None
             raise ConnectionError(
                 f"Failed to open serial port {self.port}: {err}"
             ) from err
-        except TimeoutError as err:
+        try:
+            self._query("")
+        except (TimeoutError, ConnectionError) as err:
             if self._serial and self._serial.is_open:
                 self._serial.close()
             self._serial = None
             raise ConnectionError(
-                f"No prompt received from NanoVNA on {self.port} within {self.timeout_s} seconds."
+                f"No NanoVNA answered on {self.port}: {err}"
             ) from err
 
     def close(self) -> None:
@@ -148,10 +146,8 @@ class NanoVNA(VNA):
             raise ValueError("Starting frequency must be greater than 0 Hz.")
         if stop_hz <= start_hz:
             raise ValueError("Stop frequency must be greater than start frequency.")
-        if points < 2:
-            raise ValueError("Number of points must be greater than 1.")
-        if points > MAX_POINTS:
-            raise ValueError(f"Number of points should be less than {MAX_POINTS + 1}.")
+        if points < 2 or points > MAX_POINTS:
+            raise ValueError(f"Number of points must be between 2 and {MAX_POINTS}, got {points}")
 
         response_text = self._query(f"scan {start_hz} {stop_hz} {points} {SCAN_OUTMASK}")
         # The reply is the echoed command, then one line per point, then the prompt.
@@ -206,7 +202,3 @@ class NanoVNA(VNA):
 
         except serial.SerialException as err:
             raise ConnectionError(f"Serial communication error: {err}") from err
-        except TimeoutError as err:
-            raise err
-        except ValueError as err:
-            raise err

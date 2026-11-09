@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 import serial
 
-from core.nanovna import NanoVNA, parse_scan
+from core.nanovna import NanoVNA, parse_scan, SyncError
 from core.vna import SweepResult
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -265,3 +265,18 @@ def test_bugs_are_not_disguised_as_connection_errors():
     fake.read_until = broken_read_until
     with pytest.raises(RuntimeError):
         vna.identify()
+
+# ---------- added after the M3 review ----------
+
+def test_wrong_echo_raises_sync_error():
+    vna, fake = connected_vna({b"version\r": b"garbage\r\nch> "})
+    with pytest.raises(SyncError):
+        vna.identify()
+    assert fake.written[-1] == b"version\r"
+
+def test_connect_closes_port_on_wrong_echo():
+    fake = FakeSerial({WAKE: b"garbage\r\nch> "})
+    vna = NanoVNA("COM_TEST", serial_factory=lambda *args, **kwargs: fake)
+    with pytest.raises(ConnectionError):
+        vna.connect()
+    assert not fake.is_open

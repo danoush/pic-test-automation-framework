@@ -22,7 +22,7 @@ def calculate_gage_rr():
     
     shift_means = df.groupby('Shift')['Peak_Power_dBm'].mean()
     X_bar_diff = abs(shift_means['Shift_1'] - shift_means['Shift_2'])
-    raw_av_sq = (X_bar_diff / 1.128)**2 - (EV**2 / 9)
+    raw_av_sq = (X_bar_diff / 1.414)**2 - (EV**2 / 9)
     AV = np.sqrt(max(0, raw_av_sq))
     
     GRR = np.sqrt(EV**2 + AV**2)
