@@ -1,2 +1,14 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pic-test-automation-framework"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[tool.setuptools]
+packages = ["core", "pipelines", "analytics"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]

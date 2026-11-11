@@ -2,13 +2,6 @@
 Frequency sweep through NanoVNA using measure(start_hz, stop_hz, points). Tracks performance via perf_counter().
 Outputs S21 in db (next to associated frequencies), calibration data, and IF bandwidth. 
 """
-# import sys
-from pathlib import Path
-
-# Explicitly add the project root directory (one level up from scripts/) to sys.path
-# sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-# Alternatively use `python -m scripts.bench_nanovna` in terminal
 
 import numpy as np
 from time import perf_counter
