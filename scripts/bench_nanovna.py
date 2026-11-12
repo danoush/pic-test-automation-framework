@@ -10,11 +10,14 @@ from core.nanovna import NanoVNA
 
 with NanoVNA("COM3") as vna:
     print(vna.identify())
+    calibration_data = vna._query("cal") 
+    if "load" and "isoln" and "Es" and "Er" and "Et" not in calibration_data:
+        raise SystemExit("NanoVNA not fully calibrated.")
     start = perf_counter()
     result = vna.measure(50e3, 900e6, 101)
     end = perf_counter()
     print(f"Measurement took {end - start:.3f} seconds.")
-    
+
     # Calculate S21 in dB (Insertion Loss / Attenuation)
     s21_db = 20 * np.log10(np.abs(result.s21))
 
@@ -38,7 +41,7 @@ with NanoVNA("COM3") as vna:
     for freq, val in zip(result.frequency_hz[indices], s21_db_samples):
         print(f"{freq / 1e6:8.3f} MHz: {val:.2f} dB")
     print(f"\nWorst S11 (Reflection):\n{worst_s11:.2f} dB")
-    print("\nCalibration data:", vna._query("cal"))
+    print("\nCalibration data:", calibration_data)
     print("\nIF Bandwidth:", vna._query("bandwidth"))
 
     vna._query("resume")

@@ -105,9 +105,7 @@ class NanoVNA(VNA):
         try:
             self._query("")
         except (TimeoutError, ConnectionError) as err:
-            if self._serial and self._serial.is_open:
-                self._serial.close()
-            self._serial = None
+            self.close()
             raise ConnectionError(
                 f"No NanoVNA answered on {self.port}: {err}"
             ) from err
