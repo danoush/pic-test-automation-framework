@@ -40,7 +40,7 @@ def test_small_errors_within_tolerance_pass():
     assert grade.passed
 
 
-def test_too_little_loss_fails_too():
+def test_too_little_loss_fails():
     # Tolerance applies both ways: a pad that reads light is out of spec as well.
     grade = grade_attenuation(flat(2.85), 3.0, 0.1, (50e3, 900e6))
     assert not grade.passed
@@ -112,3 +112,30 @@ def test_your_10db_pad_passes_up_to_450_mhz():
     grade = grade_attenuation(pad, 10.0, 0.1, (50e3, 450.025e6))
     assert grade.passed
     assert grade.worst_error_db == pytest.approx(-0.09)
+
+# ---------- More tests ----------
+
+"""
+Write a test in tests/test_grading.py: a flat 3.2 dB pad, nominal 3.0, tolerance 0.3, full band. 
+It should pass, with worst_error_db ≈ +0.2.
+"""
+def test_for_incorrect_hardcoding():
+    grade = grade_attenuation(flat(3.2), 3.0, 0.3, (50e3, 900e6))
+    assert grade.passed
+    assert grade.worst_error_db == pytest.approx(0.2)
+
+"""
+Your first draft compared band_hz to the sweep’s min and max. Gemini was right that this 
+doesn’t belong in pass/fail, but your instinct was guarding a real hole. 
+Grade with band_hz=(50e3, 1e9) on a sweep that stops at 900 MHz, and the part can pass 
+with 900 MHz–1 GHz never measured. Once limits come from a config file, a single typo 
+does that. “Never pass a part you didn’t measure” says it should raise ValueError, like 
+the empty band.
+
+Order: a test first (band past the sweep raises), then the check, then update the 
+docstring’s Raises section. I ran a version of this against the test file and none of the 
+current tests break.
+"""
+def test_band_past_sweep_raises():
+    with pytest.raises(ValueError):
+        grade_attenuation(flat(3.0), 3.0, 0.1, (50e3, 1e9))

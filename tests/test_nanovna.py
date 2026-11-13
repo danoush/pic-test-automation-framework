@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 import serial
 
-from core.nanovna import NanoVNA, parse_scan, SyncError
+from core.nanovna import NanoVNA, SyncError, missing_cal_flags, parse_scan
 from core.vna import SweepResult
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -280,3 +280,13 @@ def test_connect_closes_port_on_wrong_echo():
     with pytest.raises(ConnectionError):
         vna.connect()
     assert not fake.is_open
+
+#def test_missing_cal_flags_exits():
+#    with pytest.raises(SystemExit):
+#        missing_cal_flags("load isoln Es Er Et")
+
+def test_missing_cal_flags_returns():
+    assert missing_cal_flags("load isoln Es Er Et") == {"cal'ed"}
+
+def test_in_not_misused():
+    assert missing_cal_flags("loadisoln Es Er Et") == {"load", "isoln", "cal'ed"}

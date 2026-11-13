@@ -3,16 +3,18 @@ Frequency sweep through NanoVNA using measure(start_hz, stop_hz, points). Tracks
 Outputs S21 in db (next to associated frequencies), calibration data, and IF bandwidth. 
 """
 
-import numpy as np
 from time import perf_counter
-from core.nanovna import NanoVNA
 
+import numpy as np
+
+from core.nanovna import NanoVNA, missing_cal_flags
 
 with NanoVNA("COM3") as vna:
     print(vna.identify())
     calibration_data = vna._query("cal") 
-    if "load" and "isoln" and "Es" and "Er" and "Et" not in calibration_data:
-        raise SystemExit("NanoVNA not fully calibrated.")
+    missing_cals = missing_cal_flags(calibration_data)
+    if missing_cals:
+        raise SystemExit(f"Missing calibration flags: {missing_cals}.")
     start = perf_counter()
     result = vna.measure(50e3, 900e6, 101)
     end = perf_counter()

@@ -68,6 +68,20 @@ def parse_scan(text: str, expected_points: int) -> SweepResult:
         s21=s21
     )
 
+REQUIRED_CAL_FLAGS = frozenset({"load", "isoln", "Es", "Er", "Et", "cal'ed"})
+
+def missing_cal_flags(status: str) -> set[str]:
+    """Return the flags in REQUIRED_CAL_FLAGS that `status` lacks.
+
+    `status` is the output of the `cal` shell command, e.g.
+    "load isoln Es Er Et cal'ed". An empty set means fully calibrated
+    with correction switched on.
+
+    Parametrize over the table's five rows (input string → expected set)
+    """
+    missing_cal_set = REQUIRED_CAL_FLAGS - set(status.split())
+    return missing_cal_set
+
 class NanoVNA(VNA):
     """A NanoVNA-H connected over USB serial."""
 

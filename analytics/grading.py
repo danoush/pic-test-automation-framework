@@ -6,7 +6,7 @@ Limits arrive as arguments (ultimately from config), never as constants here.
 
 from dataclasses import dataclass
 
-import numpy as np  # you will need it for the body
+import numpy as np
 
 from core.vna import SweepResult
 
@@ -53,26 +53,35 @@ def grade_attenuation(
     Raises:
         ValueError: if no sweep points fall inside the band. Never pass a
             part you didn't measure.
-    """
-    passed = None
+    """ 
+    if band_hz[0] < np.min(result.frequency_hz):
+        raise ValueError(
+            f"Frequency sweep clipped at lower bound."
+            f"Requested frequency range: {band_hz[0]:g} to {band_hz[1]:g}."
+            f"Available frequency range: 50e3 to 900e6."
+            )
+    if band_hz[1] > np.max(result.frequency_hz):
+        raise ValueError(
+            "Frequency sweep clipped at upper bound."
+            f"Requested frequency range: {band_hz[0]:g} to {band_hz[1]:g}."
+            f"Available frequency range: 50e3 to 900e6."               
+            )
     mask = (result.frequency_hz >= band_hz[0]) & (result.frequency_hz <= band_hz[1])
-    freq_arr = result.frequency_hz[mask]
-    if freq_arr is None or freq_arr.size == 0:
-        raise ValueError("Invalid frequency selection.")
+    freqs_hz = result.frequency_hz[mask]
+    if freqs_hz.size == 0:
+        raise ValueError(
+            f"No requested frequencies in available range."
+            f"Requested frequency range: {band_hz[0]:g} to {band_hz[1]:g}."
+            f"Available frequency range: 50e3 to 900e6."
+            )
     measured_db = -20 * np.log10(np.abs(result.s21[mask]))
     error = measured_db - nominal_db
-    tolerance_db = 0.1
     worst_error_idx = np.argmax(np.abs(error))
     worst_error_db = error[worst_error_idx]
-    #if worst_error_db >= tolerance_db:
-    #    passed = False
-    #else:
-    #    passed = True
-    if np.all(np.abs(error) <= tolerance_db):
-        passed = True
-    else:
-        passed = False
-    worst_frequency_hz = freq_arr[worst_error_idx]
-    return Grade (passed=passed, 
-                  worst_error_db=worst_error_db, 
-                  worst_frequency_hz=worst_frequency_hz)
+    passed = bool(np.all(np.abs(error) <= tolerance_db))
+    worst_frequency_hz = freqs_hz[worst_error_idx]
+    return Grade(
+        passed=passed, 
+        worst_error_db=worst_error_db, 
+        worst_frequency_hz=worst_frequency_hz
+        )
