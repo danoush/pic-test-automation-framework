@@ -51,29 +51,24 @@ def grade_attenuation(
         in the band.
 
     Raises:
+        ValueError: if band extends beyond the sweep (on either side).
         ValueError: if no sweep points fall inside the band. Never pass a
             part you didn't measure.
-    """ 
-    if band_hz[0] < np.min(result.frequency_hz):
+    """
+    band_min = band_hz[0]
+    band_max = band_hz[1]
+    sweep_min = result.frequency_hz[0]
+    sweep_max = result.frequency_hz[-1]
+    if band_min < sweep_min or band_max > sweep_max:
         raise ValueError(
-            f"Frequency sweep clipped at lower bound."
-            f"Requested frequency range: {band_hz[0]:g} to {band_hz[1]:g}."
-            f"Available frequency range: 50e3 to 900e6."
-            )
-    if band_hz[1] > np.max(result.frequency_hz):
-        raise ValueError(
-            "Frequency sweep clipped at upper bound."
-            f"Requested frequency range: {band_hz[0]:g} to {band_hz[1]:g}."
-            f"Available frequency range: 50e3 to 900e6."               
-            )
-    mask = (result.frequency_hz >= band_hz[0]) & (result.frequency_hz <= band_hz[1])
+            f"Band {band_min:g} to {band_max:g} Hz extends past the sweep ({sweep_min} to {sweep_max} hz)."
+        )
+    mask = (result.frequency_hz >= band_min) & (result.frequency_hz <= band_max)
     freqs_hz = result.frequency_hz[mask]
     if freqs_hz.size == 0:
         raise ValueError(
-            f"No requested frequencies in available range."
-            f"Requested frequency range: {band_hz[0]:g} to {band_hz[1]:g}."
-            f"Available frequency range: 50e3 to 900e6."
-            )
+            f"Band {band_min:g} to {band_max:g} Hz contains no sampled frequencies."
+        )
     measured_db = -20 * np.log10(np.abs(result.s21[mask]))
     error = measured_db - nominal_db
     worst_error_idx = np.argmax(np.abs(error))
@@ -81,7 +76,7 @@ def grade_attenuation(
     passed = bool(np.all(np.abs(error) <= tolerance_db))
     worst_frequency_hz = freqs_hz[worst_error_idx]
     return Grade(
-        passed=passed, 
-        worst_error_db=worst_error_db, 
-        worst_frequency_hz=worst_frequency_hz
-        )
+        passed=passed,
+        worst_error_db=worst_error_db,
+        worst_frequency_hz=worst_frequency_hz,
+    )

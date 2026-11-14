@@ -1,6 +1,6 @@
 """
 Frequency sweep through NanoVNA using measure(start_hz, stop_hz, points). Tracks performance via perf_counter().
-Outputs S21 in db (next to associated frequencies), calibration data, and IF bandwidth. 
+Outputs S21 in db (next to associated frequencies), calibration data, and IF bandwidth.
 """
 
 from time import perf_counter
@@ -11,10 +11,13 @@ from core.nanovna import NanoVNA, missing_cal_flags
 
 with NanoVNA("COM3") as vna:
     print(vna.identify())
-    calibration_data = vna._query("cal") 
-    missing_cals = missing_cal_flags(calibration_data)
+    cal_status = vna._query("cal")
+    missing_cals = missing_cal_flags(cal_status)
     if missing_cals:
-        raise SystemExit(f"Missing calibration flags: {missing_cals}.")
+        raise SystemExit(
+            f"Missing calibration flags: {', '.join(sorted(missing_cals))}; "
+            f"raw calibration status: {cal_status!r}"
+        )
     start = perf_counter()
     result = vna.measure(50e3, 900e6, 101)
     end = perf_counter()
@@ -28,7 +31,7 @@ with NanoVNA("COM3") as vna:
     num_samples = 5
     indices = np.linspace(0, len(result.frequency_hz) - 1, num_samples, dtype=int)
     s21_db_samples = s21_db[indices]
-    
+
     # Calculate S11 in dB (Reflection / Return Loss)
     s11_db = 20 * np.log10(np.abs(result.s11))
 
@@ -43,7 +46,7 @@ with NanoVNA("COM3") as vna:
     for freq, val in zip(result.frequency_hz[indices], s21_db_samples):
         print(f"{freq / 1e6:8.3f} MHz: {val:.2f} dB")
     print(f"\nWorst S11 (Reflection):\n{worst_s11:.2f} dB")
-    print("\nCalibration data:", calibration_data)
+    print("\nCalibration data:", cal_status)
     print("\nIF Bandwidth:", vna._query("bandwidth"))
 
     vna._query("resume")

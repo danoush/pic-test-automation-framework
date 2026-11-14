@@ -1,5 +1,6 @@
 import sqlite3
 
+
 def initialize_production_database(db_path="hvm_test_factory.db"):
     """Creates a local relational database to log wafer-level test parameters."""
     conn = sqlite3.connect(db_path)

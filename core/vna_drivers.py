@@ -1,9 +1,10 @@
 import time
 from core.base_instrument import AbstractVNA
 
+
 class KeysightVNA(AbstractVNA):
     """Driver specifically for Keysight E5080B Network Analyzers."""
-    
+
     def connect(self) -> bool:
         print(f"[DRV-KEYSIGHT] Opening VISA session to {self.resource_address}")
         self.is_connected = True
@@ -22,9 +23,11 @@ class KeysightVNA(AbstractVNA):
 
 class AnritsuVNA(AbstractVNA):
     """Driver specifically for Anritsu VectorStar Network Analyzers."""
-    
+
     def connect(self) -> bool:
-        print(f"[DRV-ANRITSU] Initializing TCP/IP Socket interface to {self.resource_address}")
+        print(
+            f"[DRV-ANRITSU] Initializing TCP/IP Socket interface to {self.resource_address}"
+        )
         self.is_connected = True
         return True
 

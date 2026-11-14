@@ -22,9 +22,12 @@ PROMPT = b"ch> "
 MAX_POINTS = 101
 SCAN_OUTMASK = "0b111"  # bit 0: frequency, bit 1: S11, bit 2: S21
 
+
 class SyncError(ConnectionError):
     """Raised when the driver and device lose synchronization."""
+
     pass
+
 
 def parse_scan(text: str, expected_points: int) -> SweepResult:
     """Parse the output of "scan ... 0b111" into a SweepResult.
@@ -45,47 +48,42 @@ def parse_scan(text: str, expected_points: int) -> SweepResult:
     """
     if not text.strip():
         raise ValueError("Scan output is empty.")
-    
+
     # try:
     data = np.loadtxt(io.StringIO(text), ndmin=2)
     # except ValueError as err:
-        # raise ValueError(f"Failed to parse scan text: {err}") from err
+    # raise ValueError(f"Failed to parse scan text: {err}") from err
     # likely unnecessary try/except
 
     if data.shape[1] != 5:
         raise ValueError("Each line must contain exactly 5 numbers.")
-    
+
     if len(data) != expected_points:
-        raise ValueError(f"expected {expected_points} points, got {len(data)} lines of data")
+        raise ValueError(
+            f"expected {expected_points} points, got {len(data)} lines of data"
+        )
 
     frequency_hz = data[:, 0]
     s11 = data[:, 1] + 1j * data[:, 2]
     s21 = data[:, 3] + 1j * data[:, 4]
 
-    return SweepResult(
-        frequency_hz=frequency_hz, 
-        s11=s11, 
-        s21=s21
-    )
+    return SweepResult(frequency_hz=frequency_hz, s11=s11, s21=s21)
+
 
 REQUIRED_CAL_FLAGS = frozenset({"load", "isoln", "Es", "Er", "Et", "cal'ed"})
 
-def missing_cal_flags(status: str) -> set[str]:
-    """Return the flags in REQUIRED_CAL_FLAGS that `status` lacks.
 
-    `status` is the output of the `cal` shell command, e.g.
-    "load isoln Es Er Et cal'ed". An empty set means fully calibrated
-    with correction switched on.
-
-    Parametrize over the table's five rows (input string → expected set)
-    """
+def missing_cal_flags(status: str) -> frozenset[str]:
     missing_cal_set = REQUIRED_CAL_FLAGS - set(status.split())
     return missing_cal_set
+
 
 class NanoVNA(VNA):
     """A NanoVNA-H connected over USB serial."""
 
-    def __init__(self, port: str, timeout_s: float = 10.0, serial_factory=serial.Serial):
+    def __init__(
+        self, port: str, timeout_s: float = 10.0, serial_factory=serial.Serial
+    ):
         """
         Args:
             port: Serial port name, e.g. "COM3".
@@ -111,7 +109,9 @@ class NanoVNA(VNA):
                 before raising so it isn't left locked.
         """
         try:
-            self._serial = self._serial_factory(self.port, baudrate=115200, timeout=self.timeout_s)
+            self._serial = self._serial_factory(
+                self.port, baudrate=115200, timeout=self.timeout_s
+            )
         except serial.SerialException as err:
             raise ConnectionError(
                 f"Failed to open serial port {self.port}: {err}"
@@ -120,9 +120,7 @@ class NanoVNA(VNA):
             self._query("")
         except (TimeoutError, ConnectionError) as err:
             self.close()
-            raise ConnectionError(
-                f"No NanoVNA answered on {self.port}: {err}"
-            ) from err
+            raise ConnectionError(f"No NanoVNA answered on {self.port}: {err}") from err
 
     def close(self) -> None:
         """Close the port if it's open, and forget it.
@@ -134,7 +132,7 @@ class NanoVNA(VNA):
             self._serial.close()
         else:
             print(f"Port {self.port} is already closed, nothing to do")
-        
+
         self._serial = None
 
     def identify(self) -> str:
@@ -159,13 +157,16 @@ class NanoVNA(VNA):
         if stop_hz <= start_hz:
             raise ValueError("Stop frequency must be greater than start frequency.")
         if points < 2 or points > MAX_POINTS:
-            raise ValueError(f"Number of points must be between 2 and {MAX_POINTS}, got {points}")
+            raise ValueError(
+                f"Number of points must be between 2 and {MAX_POINTS}, got {points}"
+            )
 
-        response_text = self._query(f"scan {start_hz} {stop_hz} {points} {SCAN_OUTMASK}")
+        response_text = self._query(
+            f"scan {start_hz} {stop_hz} {points} {SCAN_OUTMASK}"
+        )
         # The reply is the echoed command, then one line per point, then the prompt.
         # Remove the echo and prompt, then parse the remaining lines.
         return parse_scan(response_text, expected_points=points)
-
 
     def _query(self, command: str) -> str:
         """Send one shell command and return its output.
@@ -191,9 +192,11 @@ class NanoVNA(VNA):
             self._serial.write(full_command)
 
             raw_response = self._serial.read_until(PROMPT)
-            
+
             if not raw_response.endswith(PROMPT):
-                raise TimeoutError(f"Prompt did not arrive before the timeout for command: {command!r}")
+                raise TimeoutError(
+                    f"Prompt did not arrive before the timeout for command: {command!r}"
+                )
 
             response_str = raw_response.decode("ascii")
 
@@ -201,7 +204,7 @@ class NanoVNA(VNA):
 
             if lines[0] != command:
                 raise SyncError("Driver and device are out of step.")
-            
+
             output_lines = []
             for line in lines:
                 if line.strip() == PROMPT.decode().strip():

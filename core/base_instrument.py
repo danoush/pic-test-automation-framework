@@ -1,14 +1,16 @@
 from abc import ABC, abstractmethod
 
+
 class AbstractVNA(ABC):
     """
-    The Hardware Abstraction Layer parent class. 
+    The Hardware Abstraction Layer parent class.
     Defines the contract for what ANY VNA must be able to do in our factory.
     """
+
     def __init__(self, resource_address: str):
         self.resource_address = resource_address
         self.is_connected = False
-        
+
     @abstractmethod
     def connect(self) -> bool:
         """Establishes physical or virtual connection via PyVISA."""

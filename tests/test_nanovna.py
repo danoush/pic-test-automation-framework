@@ -17,13 +17,13 @@ from core.vna import SweepResult
 FIXTURES = Path(__file__).parent / "fixtures"
 SCAN_TEXT = (FIXTURES / "scan_11pt_ports_open.txt").read_text(encoding="utf-8")
 
-WAKE = b"\r"                  # an empty command
-WAKE_REPLY = b"\r\nch> "      # the shell just prints a fresh prompt
+WAKE = b"\r"  # an empty command
+WAKE_REPLY = b"\r\nch> "  # the shell just prints a fresh prompt
 SCAN_COMMAND = b"scan 50000 900000000 11 0b111\r"
 SCAN_REPLY = (
-    b"scan 50000 900000000 11 0b111\r\n"                      # the echo
-    + SCAN_TEXT.replace("\n", "\r\n").encode("ascii")         # the data lines
-    + b"ch> "                                                 # the prompt
+    b"scan 50000 900000000 11 0b111\r\n"  # the echo
+    + SCAN_TEXT.replace("\n", "\r\n").encode("ascii")  # the data lines
+    + b"ch> "  # the prompt
 )
 
 
@@ -31,8 +31,8 @@ class FakeSerial:
     """Stands in for serial.Serial: replies to each known command with canned bytes."""
 
     def __init__(self, replies):
-        self.replies = replies        # {bytes written: bytes the device sends back}
-        self.written = []             # every write(), in order
+        self.replies = replies  # {bytes written: bytes the device sends back}
+        self.written = []  # every write(), in order
         self.is_open = True
         self._unread = b""
 
@@ -79,6 +79,7 @@ def connected_vna(replies):
 
 
 # ---------- parse_scan: pure parsing, no serial port involved ----------
+
 
 def test_parse_scan_reads_real_capture():
     result = parse_scan(SCAN_TEXT, expected_points=11)
@@ -129,6 +130,7 @@ def test_parse_scan_rejects_empty_output():
 
 # ---------- connect ----------
 
+
 def test_connect_opens_port_with_a_timeout_and_wakes_the_shell():
     # Without a timeout, a missing prompt would hang the program forever.
     calls = []
@@ -167,6 +169,7 @@ def test_connect_raises_and_closes_port_when_no_prompt_arrives():
 
 # ---------- identify ----------
 
+
 def test_identify_returns_firmware_version():
     vna, fake = connected_vna({b"version\r": b"version\r\n1.2.50\r\nch> "})
     assert vna.identify() == "1.2.50"
@@ -182,6 +185,7 @@ def test_identify_raises_timeout_when_prompt_never_arrives():
 
 # ---------- measure ----------
 
+
 def test_measure_sends_scan_and_returns_parsed_sweep():
     vna, fake = connected_vna({SCAN_COMMAND: SCAN_REPLY})
 
@@ -196,13 +200,15 @@ def test_measure_sends_scan_and_returns_parsed_sweep():
 @pytest.mark.parametrize(
     "start_hz, stop_hz, points",
     [
-        (0, 900e6, 11),       # start must be above 0 Hz
-        (900e6, 50e3, 11),    # stop must be above start
-        (50e3, 900e6, 1),     # a sweep needs at least 2 points
-        (50e3, 900e6, 102),   # this NanoVNA-H tops out at 101 points
+        (0, 900e6, 11),  # start must be above 0 Hz
+        (900e6, 50e3, 11),  # stop must be above start
+        (50e3, 900e6, 1),  # a sweep needs at least 2 points
+        (50e3, 900e6, 102),  # this NanoVNA-H tops out at 101 points
     ],
 )
-def test_measure_rejects_bad_arguments_before_sending_anything(start_hz, stop_hz, points):
+def test_measure_rejects_bad_arguments_before_sending_anything(
+    start_hz, stop_hz, points
+):
     vna, fake = connected_vna({})
     with pytest.raises(ValueError):
         vna.measure(start_hz, stop_hz, points)
@@ -216,6 +222,7 @@ def test_measure_requires_connection():
 
 
 # ---------- close and the with-block ----------
+
 
 def test_close_is_safe_before_connect_and_twice():
     NanoVNA("COM_TEST").close()  # never connected: nothing to do, no error
@@ -243,7 +250,9 @@ def test_with_block_closes_port_even_after_an_error():
 
     assert fake.is_open is False
 
+
 # ---------- added after the M2 review ----------
+
 
 def test_measure_rejects_corrupted_bytes():
     # One byte damaged on the wire: a "0" inside the first S11 value became 0xFF.
@@ -266,13 +275,16 @@ def test_bugs_are_not_disguised_as_connection_errors():
     with pytest.raises(RuntimeError):
         vna.identify()
 
+
 # ---------- added after the M3 review ----------
+
 
 def test_wrong_echo_raises_sync_error():
     vna, fake = connected_vna({b"version\r": b"garbage\r\nch> "})
     with pytest.raises(SyncError):
         vna.identify()
     assert fake.written[-1] == b"version\r"
+
 
 def test_connect_closes_port_on_wrong_echo():
     fake = FakeSerial({WAKE: b"garbage\r\nch> "})
@@ -281,12 +293,24 @@ def test_connect_closes_port_on_wrong_echo():
         vna.connect()
     assert not fake.is_open
 
-#def test_missing_cal_flags_exits():
-#    with pytest.raises(SystemExit):
-#        missing_cal_flags("load isoln Es Er Et")
 
 def test_missing_cal_flags_returns():
     assert missing_cal_flags("load isoln Es Er Et") == {"cal'ed"}
 
-def test_in_not_misused():
+
+def test_flags_must_be_whole_words():
     assert missing_cal_flags("loadisoln Es Er Et") == {"load", "isoln", "cal'ed"}
+
+
+@pytest.mark.parametrize(
+    "status, expected",
+    [
+        ("load isoln Es Er Et cal'ed", frozenset()),  # fully calibrated, correction on
+        ("load isoln Es Er Et", frozenset({"cal'ed"})),
+        ("cal'ed", frozenset({"load", "isoln", "Es", "Er", "Et"})),
+        ("", frozenset({"load", "isoln", "Es", "Er", "Et", "cal'ed"})),
+        ("load open short thru isoln", frozenset({"Es", "Er", "Et", "cal'ed"})),
+    ],
+)
+def test_missing_cal_flags(status, expected):
+    assert missing_cal_flags(status) == expected

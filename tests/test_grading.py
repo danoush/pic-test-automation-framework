@@ -18,7 +18,9 @@ def make_sweep(attenuation_db, freqs=FREQS):
     """A SweepResult whose S21 has the given attenuation (in dB) at each point."""
     attenuation_db = np.asarray(attenuation_db, dtype=float)
     s21 = 10 ** (-attenuation_db / 20) + 0j  # 3 dB of loss -> |S21| = 0.708
-    return SweepResult(frequency_hz=np.asarray(freqs, dtype=float), s11=np.zeros_like(s21), s21=s21)
+    return SweepResult(
+        frequency_hz=np.asarray(freqs, dtype=float), s11=np.zeros_like(s21), s21=s21
+    )
 
 
 def flat(attenuation_db):
@@ -27,14 +29,16 @@ def flat(attenuation_db):
 
 
 def test_pad_exactly_at_nominal_passes():
-    grade = grade_attenuation(flat(3.0), nominal_db=3.0, tolerance_db=0.1, band_hz=(50e3, 900e6))
+    grade = grade_attenuation(
+        flat(3.0), nominal_db=3.0, tolerance_db=0.1, band_hz=(50e3, 900e6)
+    )
     assert grade.passed
     assert grade.worst_error_db == pytest.approx(0.0, abs=1e-9)
 
 
 def test_small_errors_within_tolerance_pass():
     attenuation = np.full(FREQS.shape, 3.0)
-    attenuation[::2] = 3.09   # every other point 0.09 dB heavy
+    attenuation[::2] = 3.09  # every other point 0.09 dB heavy
     attenuation[1::2] = 2.92  # the rest 0.08 dB light
     grade = grade_attenuation(make_sweep(attenuation), 3.0, 0.1, (50e3, 900e6))
     assert grade.passed
@@ -82,7 +86,7 @@ def test_band_edges_are_included():
     assert grade.worst_frequency_hz == FREQS[50]
 
 
-def test_empty_band_raises():
+def test_out_of_range_band_raises():
     with pytest.raises(ValueError):
         grade_attenuation(flat(3.0), 3.0, 0.1, (1e9, 2e9))  # above the whole sweep
 
@@ -113,29 +117,22 @@ def test_your_10db_pad_passes_up_to_450_mhz():
     assert grade.passed
     assert grade.worst_error_db == pytest.approx(-0.09)
 
+
 # ---------- More tests ----------
 
-"""
-Write a test in tests/test_grading.py: a flat 3.2 dB pad, nominal 3.0, tolerance 0.3, full band. 
-It should pass, with worst_error_db ≈ +0.2.
-"""
+
 def test_for_incorrect_hardcoding():
     grade = grade_attenuation(flat(3.2), 3.0, 0.3, (50e3, 900e6))
     assert grade.passed
     assert grade.worst_error_db == pytest.approx(0.2)
 
-"""
-Your first draft compared band_hz to the sweep’s min and max. Gemini was right that this 
-doesn’t belong in pass/fail, but your instinct was guarding a real hole. 
-Grade with band_hz=(50e3, 1e9) on a sweep that stops at 900 MHz, and the part can pass 
-with 900 MHz–1 GHz never measured. Once limits come from a config file, a single typo 
-does that. “Never pass a part you didn’t measure” says it should raise ValueError, like 
-the empty band.
 
-Order: a test first (band past the sweep raises), then the check, then update the 
-docstring’s Raises section. I ran a version of this against the test file and none of the 
-current tests break.
-"""
 def test_band_past_sweep_raises():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="extends past the sweep"):
         grade_attenuation(flat(3.0), 3.0, 0.1, (50e3, 1e9))
+
+
+def test_empty_band_raises():
+    pad = measured([-2.74, -2.78, -2.81, -2.80, -2.51])
+    with pytest.raises(ValueError, match="contains no sampled frequencies"):
+        grade_attenuation(pad, 3.0, 0.1, (1e6, 2e6))
